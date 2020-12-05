@@ -197,6 +197,26 @@ Dkits.gameInjection[#Dkits.gameInjection+1] = [==[
     Dkits.eventMQ = {} -- Game event queues
     Dkits.eventHandler = {}
 
+    Dkits.sameEvent = {}
+    Dkits.eventNameMap = {
+        1  = "shot",
+        2  = "hit",
+        3  = "takeoff",
+        4  = "land",
+        5  = "crash",
+        6  = "ejection",
+        7  = "refuelingStart",
+        8  = "dead",
+        9  = "pilotDead",
+        10 = "baseCaptured",
+        11 = "missionStart",
+        12 = "missionEnd",
+        13 = "tookControl", -- hoggit标红项
+        14 = "refuelingStop",
+        15 = "birth",
+        16 = "pilotFailure",
+        17 = "detailedFailure" -- hoggit未知项
+    }
 
     function Dkits.ToStringEx(value)
         if type(value) == 'table' then
@@ -247,6 +267,9 @@ Dkits.gameInjection[#Dkits.gameInjection+1] = [==[
     
     function Dkits.eventHandler:onEvent(_event)
         env.info('Dkits event id : ' .. _event.id, false)
+
+        --此处将在本周重构 -- 重构完成之前 不用新增代码在这个判断上
+        --player takeoff event rebuild
         if _event.id == 3 then
             Dkits.eventMQ[#Dkits.eventMQ+1] = {
                 event = 'TakeOff',
@@ -257,6 +280,75 @@ Dkits.gameInjection[#Dkits.gameInjection+1] = [==[
                 callSign   = _event.initiator:getCallsign(),
                 coalition  = _event.initiator:getCoalition(),
                 baseName   = _event.place:getCallsign()
+            }
+
+        --player land event rebuild
+        elseif _event.id == 4 then
+            Dkits.eventMQ[#Dkits.eventMQ+1] = {
+                event = 'land',
+                time = _event.time,
+                playerName = _event.initiator:getPlayerName() or "",
+                playerType = _event.initiator:getTypeName(),
+                pilotName  = _event.initiator:getName(),
+                callSign   = _event.initiator:getCallsign(),
+                coalition  = _event.initiator:getCoalition(),
+                baseName   = _event.place:getCallsign()
+            }
+        
+        --player crash event rebuild
+        elseif _event.id == 5 then
+            Dkits.eventMQ[#Dkits.eventMQ+1] = {
+                event = 'crash',
+                time = _event.time,
+                playerName = _event.initiator:getPlayerName() or "",
+                playerType = _event.initiator:getTypeName(),
+                pilotName  = _event.initiator:getName(),
+                callSign   = _event.initiator:getCallsign(),
+                coalition  = _event.initiator:getCoalition()
+            }
+
+        --player ejection event rebuild
+        elseif _event.id == 6 then
+            Dkits.eventMQ[#Dkits.eventMQ+1] = {
+                event = 'ejection',
+                time = _event.time,
+                playerName = _event.initiator:getPlayerName() or "",
+                playerType = _event.initiator:getTypeName(),
+                pilotName  = _event.initiator:getName(),
+                callSign   = _event.initiator:getCallsign()
+            }
+        
+        --player refuelingStart event rebuild
+        elseif _event.id == 7 then
+            Dkits.eventMQ[#Dkits.eventMQ+1] = {
+                event = 'refuelingStart',
+                time = _event.time,
+                playerName = _event.initiator:getPlayerName() or "",
+                playerType = _event.initiator:getTypeName(),
+                pilotName  = _event.initiator:getName(),
+                callSign   = _event.initiator:getCallsign()
+            }
+        
+        --objectDead event rebuild
+        elseif _event.id == 8 then
+            Dkits.eventMQ[#Dkits.eventMQ+1] = {
+                event = 'dead',
+                time = _event.time,
+                playerName = _event.initiator:getPlayerName() or "",
+                playerType = _event.initiator:getTypeName(),
+                pilotName  = _event.initiator:getName(),
+                callSign   = _event.initiator:getCallsign()
+            }
+
+        --player dead event rebuild
+        elseif _event.id == 7 then
+            Dkits.eventMQ[#Dkits.eventMQ+1] = {
+                event = 'pilotDead',
+                time = _event.time,
+                playerName = _event.initiator:getPlayerName() or "",
+                playerType = _event.initiator:getTypeName(),
+                pilotName  = _event.initiator:getName(),
+                callSign   = _event.initiator:getCallsign()
             }
         end
     end
