@@ -31,6 +31,10 @@ Dkits.MissionConfig = {
     --这里填写编写好的api接口,因为最终数据都会被提交到你所设置的接口之上
     dataPostUrl = "http://127.0.0.1/DataPort1",
 
+    --How to get the command data? Yes! Please set your api interface url, method must be post.
+    --这里填写编写好的api接口,Dkits将尝试从该接口取得指令数据以此来控制DCS
+    dataGetUrl = "http://127.0.0.1/dcs",
+
     --Is it necessary to verify the reliability of submitted data?
     --if apiAuthentication == true then apikey and apisec in http request body
     --Note: validation is simple, Not absolutely necessarily reliable
@@ -47,13 +51,19 @@ package.path = package.path .. ';.\\LuaSocket\\?.lua'
 package.cpath = package.cpath .. ';.\\LuaSocket\\?.dll'
 Dkits.http = require('http')
 Dkits.ltn12 = require('ltn12')
-
+Dkits.socket = require("socket")
+Dkits.missionRunning = false
 
 function Dkits.info(msg)
     msg = tostring(msg)
     local newMsg = 'DKits INFO: ' .. msg
     net.log(newMsg)
 end
+
+
+function Dkits.sleep(n)
+    socket.select(nil, nil, n)
+ end
 
 
 function Dkits.dostring(str)
@@ -114,7 +124,7 @@ function Dkits.ToStringEx(value)
     if type(value) == 'table' then
         return Dkits.TableToStr(value)
     elseif type(value) == 'string' then
-        return "\'" .. value .. "\'"
+        return "\"" .. value .. "\""
     else
         return tostring(value)
     end
@@ -177,11 +187,58 @@ function Dkits.postData(data)
             source = Dkits.ltn12.source.string(request_body),
             sink = Dkits.ltn12.sink.table(response_body),
         }
+    rstab = Dkits.eval(table.concat(response_body))
+    if not rstab then
+        Dkits.info('ERROR = Dkits.eval func failed, str = ' .. table.concat(response_body))
+    end
+    return rstab
+end
+
+
+function Dkits.getData()
+    if Dkits.MissionConfig['apiAuthentication'] then
+        request_body = 'apikey=' .. Dkits.MissionConfig['apiKey'] .. '&apisec=' .. Dkits.MissionConfig['apiSec']
+    else
+        --为了防止某些web服务器可能会因为空的post请求导致出错, 所以在请求中加入了冗余数据
+        request_body = 'method=get'
+    end
+    
+    local response_body = {}
+       
+    Dkits.http.request{
+        url = Dkits.MissionConfig['dataGetUrl'],
+        method = "POST",
+        headers =
+            {
+                ["Content-Type"] = "application/x-www-form-urlencoded";
+                ["Content-Length"] = #request_body;
+            },
+            source = Dkits.ltn12.source.string(request_body),
+            sink = Dkits.ltn12.sink.table(response_body),
+        }
+    if response_body[1] ~= 'None' then
         rstab = Dkits.eval(table.concat(response_body))
         if not rstab then
             Dkits.info('ERROR = Dkits.eval func failed, str = ' .. table.concat(response_body))
+            return nil
         end
         return rstab
+    end
+    return nil
+end
+
+
+function getTaskDispatch()
+    while Dkits.commonArgs['MissionStart'] do
+        --此处为Post请求数据的协程(非提交数据)
+        res = Dkits.getData()
+        while res do
+
+            res = Dkits.getData()
+            --处理数据后再次get 直至清空队列后进入休眠
+        end
+        Dkits.sleep(500)
+    end
 end
 
 
@@ -197,32 +254,46 @@ Dkits.gameInjection[#Dkits.gameInjection+1] = [==[
     Dkits.eventMQ = {} -- Game event queues
     Dkits.eventHandler = {}
 
-    Dkits.sameEvent = {}
-    Dkits.eventNameMap = {
-        1  = "shot",
-        2  = "hit",
-        3  = "takeoff",
-        4  = "land",
-        5  = "crash",
-        6  = "ejection",
-        7  = "refuelingStart",
-        8  = "dead",
-        9  = "pilotDead",
-        10 = "baseCaptured",
-        11 = "missionStart",
-        12 = "missionEnd",
-        13 = "tookControl", -- hoggit标红项
-        14 = "refuelingStop",
-        15 = "birth",
-        16 = "pilotFailure",
-        17 = "detailedFailure" -- hoggit未知项
+    Dkits.sameEvent = {
+        groupI = {5, 6, 7, 8, 9, 14, 15, 16, 17, 18, 19, 20, 21}
     }
+    Dkits.eventNameMap = {
+        [1]  = "shot",
+        [2]  = "hit",
+        [3]  = "takeoff",
+        [4]  = "land",
+        [5]  = "crash",
+        [6]  = "ejection",
+        [7]  = "refuelingStart",
+        [8]  = "dead",
+        [9]  = "pilotDead",
+        [10] = "baseCaptured",
+        [11] = "missionStart",
+        [12] = "missionEnd",
+        [13] = "tookControl", -- hoggit标红项
+        [14] = "refuelingStop",
+        [15] = "birth",
+        [16] = "pilotFailure",
+        [17] = "detailedFailure", -- hoggit未知项
+        [18] = "engineStartup",
+        [19] = "engineShutdown",
+        [20] = "playerEnterUnit",
+        [21] = "playerLeaveUnit",
+        [23] = "shootingStart",
+        [24] = "shootingEnd",
+        [25] = "mark",
+        [26] = "markChange",
+        [27] = "markRemove",
+        [28] = "kill",
+        [29] = "landingAfterEjection"
+    }
+
 
     function Dkits.ToStringEx(value)
         if type(value) == 'table' then
             return Dkits.TableToStr(value)
         elseif type(value) == 'string' then
-            return "\'" .. value .. "\'"
+            return "\"" .. value .. "\""
         else
             return tostring(value)
         end
@@ -264,11 +335,19 @@ Dkits.gameInjection[#Dkits.gameInjection+1] = [==[
         return retstr
     end
 
+
+    function Dkits.strInTab(str, tab)
+        for _, v in pairs(tab) do
+            if str == v then return true end
+        end
+    
+        return false
+    end
+
     
     function Dkits.eventHandler:onEvent(_event)
         env.info('Dkits event id : ' .. _event.id, false)
 
-        --此处将在本周重构 -- 重构完成之前 不用新增代码在这个判断上
         --player takeoff event rebuild
         if _event.id == 3 then
             Dkits.eventMQ[#Dkits.eventMQ+1] = {
@@ -295,10 +374,10 @@ Dkits.gameInjection[#Dkits.gameInjection+1] = [==[
                 baseName   = _event.place:getCallsign()
             }
         
-        --player crash event rebuild
-        elseif _event.id == 5 then
+        --GroupI event rebuild
+        elseif Dkits.strInTab(_event.id, Dkits.sameEvent.groupI) then
             Dkits.eventMQ[#Dkits.eventMQ+1] = {
-                event = 'crash',
+                event = Dkits.eventNameMap[_event.id],
                 time = _event.time,
                 playerName = _event.initiator:getPlayerName() or "",
                 playerType = _event.initiator:getTypeName(),
@@ -306,53 +385,9 @@ Dkits.gameInjection[#Dkits.gameInjection+1] = [==[
                 callSign   = _event.initiator:getCallsign(),
                 coalition  = _event.initiator:getCoalition()
             }
-
-        --player ejection event rebuild
-        elseif _event.id == 6 then
-            Dkits.eventMQ[#Dkits.eventMQ+1] = {
-                event = 'ejection',
-                time = _event.time,
-                playerName = _event.initiator:getPlayerName() or "",
-                playerType = _event.initiator:getTypeName(),
-                pilotName  = _event.initiator:getName(),
-                callSign   = _event.initiator:getCallsign()
-            }
-        
-        --player refuelingStart event rebuild
-        elseif _event.id == 7 then
-            Dkits.eventMQ[#Dkits.eventMQ+1] = {
-                event = 'refuelingStart',
-                time = _event.time,
-                playerName = _event.initiator:getPlayerName() or "",
-                playerType = _event.initiator:getTypeName(),
-                pilotName  = _event.initiator:getName(),
-                callSign   = _event.initiator:getCallsign()
-            }
-        
-        --objectDead event rebuild
-        elseif _event.id == 8 then
-            Dkits.eventMQ[#Dkits.eventMQ+1] = {
-                event = 'dead',
-                time = _event.time,
-                playerName = _event.initiator:getPlayerName() or "",
-                playerType = _event.initiator:getTypeName(),
-                pilotName  = _event.initiator:getName(),
-                callSign   = _event.initiator:getCallsign()
-            }
-
-        --player dead event rebuild
-        elseif _event.id == 7 then
-            Dkits.eventMQ[#Dkits.eventMQ+1] = {
-                event = 'pilotDead',
-                time = _event.time,
-                playerName = _event.initiator:getPlayerName() or "",
-                playerType = _event.initiator:getTypeName(),
-                pilotName  = _event.initiator:getName(),
-                callSign   = _event.initiator:getCallsign()
-            }
         end
     end
-    
+
 
     function getNextEvent()
         if Dkits.eventMQ then
@@ -403,6 +438,9 @@ function Dkits.onMissionLoadEnd()
     local rs, err = net.dostring_in('server', Dkits.gameInjection[1])
     if err then
         Dkits.commonArgs['MissionStart'] = true
+        --启动数据接收协程
+        recv = coroutine.create(Dkits.getTaskDispatch)
+        coroutine.resume(recv)
         Dkits.info('inGameScripts loaded!')
     else
         Dkits.info('ERROR = Can not load inGameScripts! reason:' .. rs)
